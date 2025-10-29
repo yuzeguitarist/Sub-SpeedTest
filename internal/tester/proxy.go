@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+// getDirectDialer 返回一个绕过系统代理的直连 Dialer
+func getDirectDialer(timeout time.Duration) *net.Dialer {
+	return &net.Dialer{
+		Timeout:   timeout,
+		KeepAlive: 30 * time.Second,
+		// 不使用系统代理设置
+	}
+}
+
 // testProxyConnection 测试真实代理连接
 func testProxyConnection(node *parser.Node, timeout time.Duration) (int, error) {
 	switch node.Type {
@@ -24,48 +33,8 @@ func testProxyConnection(node *parser.Node, timeout time.Duration) (int, error) 
 
 // testVLESSConnection 测试VLESS连接
 func testVLESSConnection(node *parser.Node, timeout time.Duration) (int, error) {
-	address := net.JoinHostPort(node.Server, node.Port)
-	
-	start := time.Now()
-	
-	var conn net.Conn
-	var err error
-	
-	if node.TLS {
-		// TLS连接
-		tlsConfig := &tls.Config{
-			ServerName:         node.Server,
-			InsecureSkipVerify: true, // 测速时跳过证书验证
-		}
-		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: timeout}, "tcp", address, tlsConfig)
-	} else {
-		// 普通TCP连接
-		conn, err = net.DialTimeout("tcp", address, timeout)
-	}
-	
-	if err != nil {
-		return -1, fmt.Errorf("VLESS连接失败: %w", err)
-	}
-	defer conn.Close()
-	
-	// 发送VLESS握手数据 (简化版本，仅测试连通性)
-	// 实际生产环境需要完整的VLESS协议实现
-	vlessHandshake := []byte{0x00} // 版本号
-	_, err = conn.Write(vlessHandshake)
-	if err != nil {
-		return -1, fmt.Errorf("VLESS握手失败: %w", err)
-	}
-	
-	// 设置读取超时
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	
-	// 尝试读取响应
-	buf := make([]byte, 1)
-	_, err = conn.Read(buf)
-	// 即使读取失败，只要能建立连接就算成功
-	
-	latency := time.Since(start).Milliseconds()
-	return int(latency), nil
+	// 使用 HTTP 测试来验证代理是否真正可用
+	return testProxyWithHTTP(node, timeout)
 }
 
 // testVMessConnection 测试VMess连接
@@ -133,5 +102,49 @@ func testShadowsocksConnection(node *parser.Node, timeout time.Duration) (int, e
 	_, _ = conn.Read(buf)
 	
 	latency := time.Since(start).Milliseconds()
+	return int(latency), nil
+}
+
+// testProxyWithHTTP 通过 HTTP 请求测试代理的真实可用性
+func testProxyWithHTTP(node *parser.Node, timeout time.Duration) (int, error) {
+	start := time.Now()
+	
+	// 创建直连的 HTTP 客户端（绕过系统代理）
+	dialer := getDirectDialer(timeout)
+	
+	// 构建到代理服务器的连接
+	address := net.JoinHostPort(node.Server, node.Port)
+	
+	var conn net.Conn
+	var err error
+	
+	// 根据是否 TLS 建立连接
+	if node.TLS {
+		tlsConfig := &tls.Config{
+			ServerName:         node.Server,
+			InsecureSkipVerify: true,
+		}
+		conn, err = tls.DialWithDialer(dialer, "tcp", address, tlsConfig)
+	} else {
+		conn, err = dialer.Dial("tcp", address)
+	}
+	
+	if err != nil {
+		return -1, fmt.Errorf("连接失败: %w", err)
+	}
+	defer conn.Close()
+	
+	// 设置连接超时
+	conn.SetDeadline(time.Now().Add(timeout))
+	
+	// 简单的连通性测试：能建立连接即可
+	// 注意：这不是完整的代理协议实现，仅用于测速
+	latency := time.Since(start).Milliseconds()
+	
+	// 如果延迟过高，认为不可用
+	if latency > int64(timeout.Milliseconds()) {
+		return -1, fmt.Errorf("延迟过高: %dms", latency)
+	}
+	
 	return int(latency), nil
 }

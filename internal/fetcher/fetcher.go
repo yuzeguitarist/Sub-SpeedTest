@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -13,21 +14,25 @@ import (
 
 // FetchSubscription 从URL下载订阅内容并解码
 func FetchSubscription(url string) (string, error) {
-	// 创建自定义 Transport 以提高兼容性
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: false,
-		},
-		DisableKeepAlives:     false,
-		MaxIdleConns:          10,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-
+	// 创建自定义的 HTTP 客户端（绕过系统代理）
 	client := &http.Client{
-		Timeout:   30 * time.Second,
-		Transport: transport,
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			// 禁用系统代理
+			Proxy: nil,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+			DisableKeepAlives:     false,
+			MaxIdleConns:          10,
+			IdleConnTimeout:       30 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
 	}
 
 	// 创建请求并设置 User-Agent

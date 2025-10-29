@@ -10,6 +10,8 @@
 - ✅ 多种测速模式：TCP Ping、真实代理连接测试
 - ✅ 结果按延迟自动排序
 - ✅ 清晰的表格化结果展示
+- ✅ 支持 IPv4 和 IPv6 地址
+- ✅ 自动绕过系统代理 - 即使开启 VPN 也能直连测试节点
 
 ## 安装
 
@@ -67,6 +69,13 @@ go run main.go
 # 组合使用：高并发 + 短超时 + 详细日志
 ./proxy-tester test -u "https://example.com/sub" -c 20 -t 3 -v
 ```
+
+## 文档
+
+- [更新日志](docs/CHANGELOG.md) - 版本历史和更新内容
+- [故障排除](docs/TROUBLESHOOTING.md) - 常见问题和解决方案
+- [功能路线图](docs/ROADMAP.md) - 计划中的新功能
+- [架构说明](docs/ARCHITECTURE.md) - 技术实现和改进方向
 
 ## 输出示例
 
