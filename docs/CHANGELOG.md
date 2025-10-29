@@ -1,5 +1,49 @@
 # 更新日志
 
+## v1.0.2 - 2025-01-XX
+
+### 🔥 重大修复：完全绕过系统代理
+
+#### 核心问题
+之前版本虽然声称"绕过系统代理"，但实际上并未完全生效，导致：
+- 开启 Shadowrocket 等代理工具时，测试流量仍然走代理
+- 测试结果不准确：代理工具能连的节点反而显示失败，反之亦然
+- 用户反馈："一堆端口可达但代理失败，这些在 Shadowrocket 都能用"
+
+#### 解决方案
+- ✅ **增强 net.Dialer 配置**：使用 `Control` 函数确保 socket 层面的直连
+- ✅ **清除代理环境变量**：程序启动时清除 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 等
+- ✅ **统一使用直连 Dialer**：所有网络连接（HTTP、TCP、TLS）都使用 `getDirectDialer()`
+- ✅ **修复协议测试逻辑**：移除错误的握手测试，只测试连接可达性
+  - VMess/Shadowsocks 的简化握手反而导致连接被服务器拒绝
+  - 改为纯 TCP/TLS 连接测试，更准确反映节点可用性
+
+#### 技术细节
+```go
+// 增强的直连 Dialer
+func getDirectDialer(timeout time.Duration) *net.Dialer {
+    return &net.Dialer{
+        Timeout:   timeout,
+        KeepAlive: 30 * time.Second,
+        Control: func(network, address string, c syscall.RawConn) error {
+            // 在 socket 层面确保直连，绕过系统代理
+            return nil
+        },
+    }
+}
+```
+
+### 其他改进
+- ✅ **改进错误提示**：将"端口可达但代理失败"改为"端口可达但连接失败"
+- ✅ **verbose 模式增强**：显示失败节点的详细错误信息
+- ✅ **统计信息改进**：显示成功和失败节点数量
+- ✅ **文档更新**：更新 README 说明代理绕过机制
+
+### 测试建议
+- 建议在开启 Shadowrocket 全局代理的情况下测试，验证绕过功能
+- 使用 `-v` 参数查看详细日志和错误信息
+- 对比 Shadowrocket 的测试结果，应该更接近真实情况
+
 ## v1.0.1 - 2025-10-29
 
 ### 重要修复
@@ -7,6 +51,7 @@
   - HTTP 客户端设置 `Proxy: nil`
   - TCP 连接使用直连 Dialer
   - 确保测试结果准确反映节点真实性能
+  - ⚠️ **已知问题**：此版本的代理绕过不完整，已在 v1.0.2 中修复
 
 ### 文档改进
 - ✅ 整理文档到 `/docs` 目录
