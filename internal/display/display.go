@@ -7,6 +7,8 @@ import (
     "strings"
 
     "github.com/fatih/color"
+    "github.com/jedib0t/go-pretty/v6/table"
+    "github.com/jedib0t/go-pretty/v6/text"
 )
 
 // 定义颜色函数
@@ -57,17 +59,9 @@ func ShowResults(results []*tester.TestResult, verbose bool) {
     printSummary(stats)
     
     printSeparator("═")
-    
-    // 打印表头
-    printTableHeader()
 
-    // 打印每个结果
-    for i, result := range results {
-        printTableRow(result, i+1)
-    }
-
-    // 打印表格底部边框
-    printSeparator("─")
+    // 使用 go-pretty 表格库显示结果
+    printResultsTable(results)
     fmt.Println()
 
     // 打印延迟分布
@@ -180,79 +174,91 @@ func printSummary(stats *Stats) {
     fmt.Println()
 }
 
-// printTableHeader 打印表头
-func printTableHeader() {
-    printSeparator("─")
-    
-    header := fmt.Sprintf("│ %s │ %s │ %s │ %s │ %s │ %s │",
-        centerString("序号", 4),
-        padRight("节点名称", 35),
-        padRight("服务器地址", 22),
-        centerString("协议", 8),
-        centerString("TCP延迟", 9),
-        centerString("真实延迟", 10),
-    )
-    
-    fmt.Println(cyan(header))
-    printSeparator("─")
-}
+// printResultsTable 使用 go-pretty 表格库打印结果
+func printResultsTable(results []*tester.TestResult) {
+    t := table.NewWriter()
 
-// printTableRow 打印单行结果
-func printTableRow(result *tester.TestResult, index int) {
-    // 序号
-    indexStr := fmt.Sprintf("%d", index)
-    
-    // 节点名称
-    name := result.Node.Name
-    if name == "" {
-        name = "未命名"
-    }
-    name = truncateString(name, 35)
-    
-    // 服务器地址
-    address := truncateString(result.Node.Address(), 22)
-    
-    // 协议类型（带颜色）
-    protocol := formatProtocol(result.Node.Type)
-    
-    // TCP延迟
-    tcpLatency := formatLatency(result.TCPLatency)
-    
-    // 真实延迟（带颜色）
-    proxyLatency := formatLatency(result.ProxyLatency)
-    
-    // 根据状态设置行颜色
-    var rowColor func(a ...interface{}) string
-    if result.IsSuccess() {
-        rowColor = white
-        // 根据延迟着色名称
-        latency := result.ProxyLatency
-        if latency <= 0 {
-            latency = result.TCPLatency
+    // 配置表格样式 - 使用优雅的圆角边框
+    t.SetStyle(table.StyleRounded)
+
+    // 自定义颜色 - 表头使用青色
+    t.SetColumnConfigs([]table.ColumnConfig{
+        {Number: 1, Align: text.AlignCenter, AlignHeader: text.AlignCenter},  // 序号
+        {Number: 2, Align: text.AlignLeft, AlignHeader: text.AlignLeft},      // 节点名称
+        {Number: 3, Align: text.AlignLeft, AlignHeader: text.AlignLeft},      // 服务器地址
+        {Number: 4, Align: text.AlignCenter, AlignHeader: text.AlignCenter},  // 协议
+        {Number: 5, Align: text.AlignCenter, AlignHeader: text.AlignCenter},  // TCP延迟
+        {Number: 6, Align: text.AlignCenter, AlignHeader: text.AlignCenter},  // 真实延迟
+        {Number: 7, Align: text.AlignCenter, AlignHeader: text.AlignCenter},  // 状态
+    })
+
+    // 设置表头 - 使用青色加粗
+    t.AppendHeader(table.Row{
+        cyanB("序号"),
+        cyanB("节点名称"),
+        cyanB("服务器地址"),
+        cyanB("协议"),
+        cyanB("TCP延迟"),
+        cyanB("真实延迟"),
+        cyanB("状态"),
+    })
+
+    // 添加数据行
+    for i, result := range results {
+        // 节点名称
+        name := result.Node.Name
+        if name == "" {
+            name = "未命名"
         }
-        name = colorizeByLatency(name, latency)
-        proxyLatency = colorizeLatencyValue(proxyLatency, result.ProxyLatency)
-        tcpLatency = colorizeLatencyValue(tcpLatency, result.TCPLatency)
-    } else {
-        rowColor = gray
-        name = gray(name)
-        address = gray(address)
+
+        // 服务器地址
+        address := result.Node.Address()
+
+        // 协议类型（带颜色）
+        protocolStr := formatProtocolSimple(result.Node.Type)
+
+        // TCP延迟
+        tcpLatencyStr := formatLatencySimple(result.TCPLatency)
+
+        // 真实延迟
+        proxyLatencyStr := formatLatencySimple(result.ProxyLatency)
+
+        // 状态图标
+        statusIcon := formatStatusIcon(result.Status)
+
+        // 根据状态着色
+        if result.IsSuccess() {
+            // 成功节点 - 根据延迟着色
+            latency := result.ProxyLatency
+            if latency <= 0 {
+                latency = result.TCPLatency
+            }
+
+            name = colorizeByLatency(name, latency)
+            tcpLatencyStr = colorizeByLatency(tcpLatencyStr, result.TCPLatency)
+            proxyLatencyStr = colorizeByLatency(proxyLatencyStr, result.ProxyLatency)
+        } else {
+            // 失败节点 - 全部灰色
+            name = gray(name)
+            address = gray(address)
+            tcpLatencyStr = gray(tcpLatencyStr)
+            proxyLatencyStr = gray(proxyLatencyStr)
+        }
+
+        // 添加行
+        t.AppendRow(table.Row{
+            whiteB(fmt.Sprintf("%d", i+1)),
+            name,
+            white(address),
+            protocolStr,
+            tcpLatencyStr,
+            proxyLatencyStr,
+            statusIcon,
+        })
     }
-    
-    // 状态图标
-    statusIcon := formatStatusIcon(result.Status)
-    
-    row := fmt.Sprintf("│ %s │ %s │ %s │ %s │ %s │ %s %s │",
-        rowColor(centerString(indexStr, 4)),
-        name,
-        rowColor(padRight(address, 22)),
-        protocol,
-        tcpLatency,
-        proxyLatency,
-        statusIcon,
-    )
-    
-    fmt.Println(row)
+
+    // 渲染表格
+    fmt.Println(t.Render())
 }
 
 // printSeparator 打印分隔线
@@ -262,7 +268,7 @@ func printSeparator(char string) {
     fmt.Println(gray(strings.Repeat(char, width)))
 }
 
-// formatProtocol 格式化协议类型
+// formatProtocol 格式化协议类型（旧版本，兼容保留）
 func formatProtocol(proxyType interface{}) string {
     protocolStr := fmt.Sprintf("%v", proxyType)
     switch protocolStr {
@@ -274,6 +280,21 @@ func formatProtocol(proxyType interface{}) string {
         return centerString(yellow("SS"), 8)
     default:
         return centerString(gray("Unknown"), 8)
+    }
+}
+
+// formatProtocolSimple 格式化协议类型（简化版，用于表格库）
+func formatProtocolSimple(proxyType interface{}) string {
+    protocolStr := fmt.Sprintf("%v", proxyType)
+    switch protocolStr {
+    case "vless":
+        return magenta("VLESS")
+    case "vmess":
+        return cyan("VMess")
+    case "ss":
+        return yellow("SS")
+    default:
+        return gray("Unknown")
     }
 }
 
@@ -293,12 +314,20 @@ func formatStatusIcon(status string) string {
     }
 }
 
-// formatLatency 格式化延迟显示
+// formatLatency 格式化延迟显示（旧版本，兼容保留）
 func formatLatency(latency int) string {
     if latency < 0 {
         return centerString("-", 9)
     }
     return centerString(fmt.Sprintf("%dms", latency), 9)
+}
+
+// formatLatencySimple 格式化延迟显示（简化版，用于表格库）
+func formatLatencySimple(latency int) string {
+    if latency < 0 {
+        return "-"
+    }
+    return fmt.Sprintf("%dms", latency)
 }
 
 // formatLatencyWithColor 格式化延迟并根据值着色
