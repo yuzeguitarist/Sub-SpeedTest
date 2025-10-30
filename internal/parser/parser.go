@@ -4,9 +4,10 @@ import (
     "encoding/base64"
     "encoding/json"
     "fmt"
-    "log"
     "net/url"
     "strings"
+
+    "github.com/fatih/color"
 )
 
 // ParseNodes 解析订阅内容中的所有节点
@@ -15,7 +16,7 @@ func ParseNodes(content string, verbose bool) ([]*Node, error) {
     var nodes []*Node
 
     if verbose {
-        log.Printf("📋 开始解析，共 %d 行内容\n", len(lines))
+        fmt.Printf("    %s %s\n", color.CyanString("📋"), color.WhiteString(fmt.Sprintf("开始解析，共 %d 行内容", len(lines))))
     }
 
     for i, line := range lines {
@@ -28,15 +29,29 @@ func ParseNodes(content string, verbose bool) ([]*Node, error) {
         if node != nil && node.Type != ProxyTypeUnknown {
             nodes = append(nodes, node)
             if verbose {
-                log.Printf("✅ [%d] 解析成功: %s (%s:%s)\n", i+1, node.Name, node.Server, node.Port)
+                nodeName := node.Name
+                if nodeName == "" {
+                    nodeName = "未命名"
+                }
+                fmt.Printf("    %s %s\n", 
+                    color.GreenString("✓"), 
+                    color.HiBlackString(fmt.Sprintf("[%d] %s (%s:%s)", i+1, nodeName, node.Server, node.Port)))
             }
         } else if verbose {
-            log.Printf("⚠️  [%d] 跳过未知格式: %s\n", i+1, line[:min(50, len(line))])
+            preview := line
+            if len(preview) > 50 {
+                preview = preview[:50] + "..."
+            }
+            fmt.Printf("    %s %s\n", 
+                color.YellowString("⊘"), 
+                color.HiBlackString(fmt.Sprintf("[%d] 跳过未知格式: %s", i+1, preview)))
         }
     }
 
     if verbose {
-        log.Printf("\n📊 解析完成: 成功 %d 个节点\n", len(nodes))
+        fmt.Printf("\n    %s %s\n\n", 
+            color.GreenString("✓"), 
+            color.WhiteString(fmt.Sprintf("解析完成: 成功 %d 个节点", len(nodes))))
     }
 
     return nodes, nil
