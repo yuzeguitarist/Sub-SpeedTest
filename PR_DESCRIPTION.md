@@ -159,11 +159,11 @@ return int(time.Since(start).Milliseconds()), nil
 
 ### 为什么需要三层防护？
 
-1. **环境变量**：Go 的 net/http 包会自动读取 `HTTP_PROXY` 等变量
-2. **Control 函数**：在 socket 层面确保直连，绕过更高层的代理逻辑
-3. **Proxy 函数**：明确告诉 HTTP Transport 不使用任何代理
+1. **环境变量**：Go 的 `net/http` 包通过 `http.ProxyFromEnvironment` 读取环境变量（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`）。Shadowrocket 等工具会设置这些变量。
+2. **Control 函数**：在 socket 层面确保直连，绕过更高层的代理逻辑。
+3. **Proxy 函数**：明确提供返回 nil 的 Proxy 函数，告诉 HTTP Transport 不使用任何代理。如果 Proxy 字段为 nil，会使用默认的 `ProxyFromEnvironment`。
 
-三层配合才能确保完全绕过所有代理设置。
+**重要澄清**：Go 的 `net/http` 包**不会**读取 macOS 系统偏好设置中的代理配置，只使用环境变量。三层防护是为了完全绕过环境变量和代码层面的代理设置。
 
 ### 为什么移除协议握手？
 

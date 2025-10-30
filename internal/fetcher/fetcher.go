@@ -2,6 +2,7 @@ package fetcher
 
 import (
     "compress/gzip"
+    "compress/zlib"
     "crypto/tls"
     "encoding/base64"
     "fmt"
@@ -33,7 +34,10 @@ func FetchSubscription(url string) (string, error) {
             Proxy:       http.ProxyFromEnvironment, // 先设置默认值
             DialContext: dialer.DialContext,
             TLSClientConfig: &tls.Config{
+                // 注意：这里跳过证书验证是为了兼容自签名证书的订阅服务器
+                // 如果订阅源使用正规证书，建议设置为 false
                 InsecureSkipVerify: true,
+                MinVersion:         tls.VersionTLS12, // 最低 TLS 1.2
             },
             DisableKeepAlives:     false,
             MaxIdleConns:          10,
@@ -58,7 +62,8 @@ func FetchSubscription(url string) (string, error) {
     // 设置常见的浏览器 User-Agent 以避免被拦截
     req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     req.Header.Set("Accept", "*/*")
-    req.Header.Set("Accept-Encoding", "gzip, deflate")
+    // 不手动设置 Accept-Encoding，让 net/http 自动处理 gzip
+    // 这样可以自动解压，简化代码
     req.Header.Set("Connection", "keep-alive")
 
     resp, err := client.Do(req)
@@ -71,15 +76,38 @@ func FetchSubscription(url string) (string, error) {
         return "", fmt.Errorf("HTTP状态码错误: %d", resp.StatusCode)
     }
 
-    // 处理 gzip 压缩
+    // 处理响应编码（gzip 或 deflate）
+    // 注意：如果不手动设置 Accept-Encoding，Go 会自动处理 gzip
+    // 但如果手动设置了，则需要手动解压
     var reader io.Reader = resp.Body
-    if resp.Header.Get("Content-Encoding") == "gzip" {
-        gzipReader, err := gzip.NewReader(resp.Body)
-        if err != nil {
-            return "", fmt.Errorf("gzip解压失败: %w", err)
+    contentEncoding := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Encoding")))
+    
+    // 处理可能的多个编码（如 "gzip, deflate"）
+    encodings := strings.Split(contentEncoding, ",")
+    for i := len(encodings) - 1; i >= 0; i-- {
+        encoding := strings.TrimSpace(encodings[i])
+        switch encoding {
+        case "gzip":
+            gzipReader, err := gzip.NewReader(reader)
+            if err != nil {
+                return "", fmt.Errorf("gzip解压失败: %w", err)
+            }
+            defer gzipReader.Close()
+            reader = gzipReader
+        case "deflate":
+            zlibReader, err := zlib.NewReader(reader)
+            if err != nil {
+                return "", fmt.Errorf("deflate解压失败: %w", err)
+            }
+            defer zlibReader.Close()
+            reader = zlibReader
+        case "":
+            // 空字符串，忽略
+            continue
+        default:
+            // 未知编码，继续处理
+            continue
         }
-        defer gzipReader.Close()
-        reader = gzipReader
     }
 
     body, err := io.ReadAll(reader)

@@ -57,7 +57,7 @@ func ShowResults(results []*tester.TestResult, verbose bool) {
 
 // sortResults 按真实延迟排序
 func sortResults(results []*tester.TestResult) {
-    sort.Slice(results, func(i, j int) bool {
+    sort.SliceStable(results, func(i, j int) bool {
         // 成功的排在前面
         if results[i].IsSuccess() && !results[j].IsSuccess() {
             return true

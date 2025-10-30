@@ -9,6 +9,16 @@ import (
 
 // TestNodes 并发测试所有节点
 func TestNodes(nodes []*parser.Node, concurrency int, timeoutSec int) []*TestResult {
+    // 验证并发参数，防止死锁
+    if concurrency < 1 {
+        concurrency = 1
+    }
+    
+    // 验证超时参数，使用合理的默认值
+    if timeoutSec <= 0 {
+        timeoutSec = 30
+    }
+    
     results := make([]*TestResult, 0, len(nodes))
     var resultsMutex sync.Mutex
     
@@ -82,7 +92,8 @@ func testNode(node *parser.Node, timeoutSec int) *TestResult {
         result.Error = proxyErr.Error()
         
         // 如果 TCP 可达但代理测试失败，可能是 TLS 或其他问题
-        if result.TCPLatency > 0 {
+        // 注意：>= 0 以包含 0ms 的情况（非常快的连接）
+        if result.TCPLatency >= 0 {
             result.Status = "端口可达但连接失败"
         } else {
             result.Status = "超时"

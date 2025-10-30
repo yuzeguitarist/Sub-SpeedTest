@@ -30,10 +30,11 @@ conn, err := tls.DialWithDialer(&net.Dialer{Timeout: timeout}, ...)  // ❌ 没�
 ```
 
 **问题说明：**
-- Go 的 `net.Dialer` 默认会读取系统环境变量 (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`)
-- Shadowrocket 等工具会设置这些环境变量或系统代理
-- 仅设置 `Proxy: nil` 在 HTTP Transport 上不够，TCP 连接仍然可能走代理
-- macOS 系统代理设置会影响所有网络连接
+- Go 的 `net/http` 包会通过 `http.ProxyFromEnvironment` 函数读取环境变量 (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`)
+- Shadowrocket 等工具会设置这些环境变量
+- 仅设置 `Proxy: nil` 在 HTTP Transport 上不够，因为 nil 会导致使用默认的 `ProxyFromEnvironment`
+- 必须提供自定义的 Proxy 函数（返回 nil）才能完全禁用代理
+- **注意**：Go 的 `net/http` 不会读取 macOS 系统偏好设置中的代理配置，只使用环境变量
 
 **修复方案：**
 ```go
@@ -197,12 +198,15 @@ func testVMessConnection(node *parser.Node, timeout time.Duration) (int, error) 
 3. 确保使用直接的网络连接
 
 ### 为什么要清除环境变量？
-Go 的 `net/http` 和 `net` 包会自动读取这些环境变量：
-- `HTTP_PROXY` / `http_proxy`
-- `HTTPS_PROXY` / `https_proxy`
-- `ALL_PROXY` / `all_proxy`
+Go 的 `net/http` 包通过 `http.ProxyFromEnvironment` 函数自动读取这些环境变量：
+- `HTTP_PROXY` / `http_proxy` - 用于 HTTP 请求
+- `HTTPS_PROXY` / `https_proxy` - 用于 HTTPS 请求
+- `ALL_PROXY` / `all_proxy` - 用于所有协议
+- `NO_PROXY` / `no_proxy` - 不使用代理的地址列表
 
-代理工具（如 Shadowrocket）可能会设置这些变量，影响所有 Go 程序的网络连接。
+代理工具（如 Shadowrocket）会设置这些环境变量，让应用程序通过代理访问网络。
+
+**重要**：Go 的 `net/http` 包**不会**读取操作系统的系统代理设置（如 macOS 的"网络偏好设置"），只使用环境变量。这与某些原生应用不同。
 
 ### 为什么移除协议握手？
 完整的代理协议实现需要：
