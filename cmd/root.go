@@ -34,7 +34,7 @@ var rootCmd = &cobra.Command{
     proxy-tester test -u <订阅URL>
     proxy-tester test -u <订阅URL> -c 20 -t 10 -v
   
-  ` + color.HiBlackString(`更多信息请访问: https://github.com/yourusername/proxy-tester`),
+  ` + color.HiBlackString(`更多信息请访问: https://github.com/proxy-node-tester/proxy-tester`),
 }
 
 func Execute() {
